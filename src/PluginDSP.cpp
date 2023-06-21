@@ -10,195 +10,282 @@
 
 START_NAMESPACE_DISTRHO
 
-// --------------------------------------------------------------------------------------------------------------------
-
-static constexpr const float CLAMP(float v, float min, float max)
-{
-    return std::min(max, std::max(min, v));
-}
-
-static constexpr const float DB_CO(float g)
-{
-    return g > -90.f ? std::pow(10.f, g * 0.05f) : 0.f;
-}
-
-// --------------------------------------------------------------------------------------------------------------------
-
 class ImGuiPluginDSP : public Plugin
 {
-    enum Parameters {
-        kParamGain = 0,
+    enum Parameters
+    {
+        kParamRate = 0,
+        KParamNoteLen,
         kParamCount
     };
 
-    float fGainDB = 0.0f;
-    ExponentialValueSmoother fSmoothGain;
+    struct arpaggio_s
+    {
+        float timer;
+        float steps;
+        uint8_t midi_status;
+        uint8_t midi_velocity;
+    } arpaggio[128];
+
+    float fParams[kParamCount];
 
 public:
-   /**
-      Plugin class constructor.@n
-      You must set all parameter values to their defaults, matching ParameterRanges::def.
-    */
+    /**
+       Plugin class constructor.@n
+       You must set all parameter values to their defaults, matching ParameterRanges::def.
+     */
     ImGuiPluginDSP()
         : Plugin(kParamCount, 0, 0) // parameters, programs, states
     {
-        fSmoothGain.setSampleRate(getSampleRate());
-        fSmoothGain.setTargetValue(DB_CO(0.f));
-        fSmoothGain.setTimeConstant(0.020f); // 20ms
+        std::memset(fParams, 0, sizeof(fParams));
+        fParams[kParamRate] = 1.0;
+        fParams[KParamNoteLen] = 1.0;
+
+        std::memset(arpaggio, 0, sizeof(arpaggio));
     }
 
 protected:
     // ----------------------------------------------------------------------------------------------------------------
     // Information
 
-   /**
-      Get the plugin label.@n
-      This label is a short restricted name consisting of only _, a-z, A-Z and 0-9 characters.
-    */
-    const char* getLabel() const noexcept override
+    /**
+       Get the plugin label.@n
+       This label is a short restricted name consisting of only _, a-z, A-Z and 0-9 characters.
+     */
+    const char *getLabel() const noexcept override
     {
-        return "SimpleGain";
+        return "futureArp";
     }
 
-   /**
-      Get an extensive comment/description about the plugin.@n
-      Optional, returns nothing by default.
-    */
-    const char* getDescription() const override
+    /**
+       Get an extensive comment/description about the plugin.@n
+       Optional, returns nothing by default.
+     */
+    const char *getDescription() const override
     {
-        return "A simple audio volume gain plugin with ImGui for its GUI";
+        return "A Midi Arpeggiator with audio effect";
     }
 
-   /**
-      Get the plugin author/maker.
-    */
-    const char* getMaker() const noexcept override
+    /**
+       Get the plugin author/maker.
+     */
+    const char *getMaker() const noexcept override
     {
-        return "Jean Pierre Cimalando, falkTX";
+        return "Key2";
     }
 
-   /**
-      Get the plugin license (a single line of text or a URL).@n
-      For commercial plugins this should return some short copyright information.
-    */
-    const char* getLicense() const noexcept override
+    /**
+       Get the plugin license (a single line of text or a URL).@n
+       For commercial plugins this should return some short copyright information.
+     */
+    const char *getLicense() const noexcept override
     {
         return "ISC";
     }
 
-   /**
-      Get the plugin version, in hexadecimal.
-      @see d_version()
-    */
+    /**
+       Get the plugin version, in hexadecimal.
+       @see d_version()
+     */
     uint32_t getVersion() const noexcept override
     {
         return d_version(1, 0, 0);
     }
 
-   /**
-      Get the plugin unique Id.@n
-      This value is used by LADSPA, DSSI and VST plugin formats.
-      @see d_cconst()
-    */
+    /**
+       Get the plugin unique Id.@n
+       This value is used by LADSPA, DSSI and VST plugin formats.
+       @see d_cconst()
+     */
     int64_t getUniqueId() const noexcept override
     {
-        return d_cconst('d', 'I', 'm', 'G');
+        return d_cconst('m', 'M', 'A', 'r');
     }
 
     // ----------------------------------------------------------------------------------------------------------------
     // Init
 
-   /**
-      Initialize the parameter @a index.@n
-      This function will be called once, shortly after the plugin is created.
-    */
-    void initParameter(uint32_t index, Parameter& parameter) override
+    /**
+       Initialize the parameter @a index.@n
+       This function will be called once, shortly after the plugin is created.
+     */
+    void initParameter(uint32_t index, Parameter &parameter) override
     {
-        DISTRHO_SAFE_ASSERT_RETURN(index == 0,);
 
-        parameter.ranges.min = -90.0f;
-        parameter.ranges.max = 30.0f;
-        parameter.ranges.def = 0.0f;
-        parameter.hints = kParameterIsAutomatable;
-        parameter.name = "Gain";
-        parameter.shortName = "Gain";
-        parameter.symbol = "gain";
-        parameter.unit = "dB";
+        switch (index)
+        {
+        case kParamRate:
+            parameter.ranges.min = 0.0f;
+            parameter.ranges.max = 16.0f;
+            parameter.ranges.def = 1.0f;
+            parameter.hints = kParameterIsAutomatable;
+            parameter.name = "Rate";
+            parameter.shortName = "Rate";
+            parameter.symbol = "Rate";
+            parameter.unit = "bpm";
+            break;
+
+        case KParamNoteLen:
+            parameter.ranges.min = 0.01f;
+            parameter.ranges.max = 1.0f;
+            parameter.ranges.def = 1.0f;
+            parameter.hints = kParameterIsAutomatable;
+            parameter.name = "Note Lenght";
+            parameter.shortName = "NoteLen";
+            parameter.symbol = "NoteLen";
+            parameter.unit = "bpm";
+            break;
+        }
     }
 
     // ----------------------------------------------------------------------------------------------------------------
     // Internal data
 
-   /**
-      Get the current value of a parameter.@n
-      The host may call this function from any context, including realtime processing.
-    */
+    /**
+       Get the current value of a parameter.@n
+       The host may call this function from any context, including realtime processing.
+     */
     float getParameterValue(uint32_t index) const override
     {
-        DISTRHO_SAFE_ASSERT_RETURN(index == 0, 0.0f);
 
-        return fGainDB;
+        printf("requesting params %d returning %f\n", index, fParams[index]);
+        return fParams[index];
     }
 
-   /**
-      Change a parameter value.@n
-      The host may call this function from any context, including realtime processing.@n
-      When a parameter is marked as automatable, you must ensure no non-realtime operations are performed.
-      @note This function will only be called for parameter inputs.
-    */
+    /**
+       Change a parameter value.@n
+       The host may call this function from any context, including realtime processing.@n
+       When a parameter is marked as automatable, you must ensure no non-realtime operations are performed.
+       @note This function will only be called for parameter inputs.
+     */
     void setParameterValue(uint32_t index, float value) override
     {
-        DISTRHO_SAFE_ASSERT_RETURN(index == 0,);
-
-        fGainDB = value;
-        fSmoothGain.setTargetValue(DB_CO(CLAMP(value, -90.0, 30.0)));
+        // printf("set param %d valu %f\n", index, value);
+        fParams[index] = value;
     }
 
     // ----------------------------------------------------------------------------------------------------------------
     // Audio/MIDI Processing
 
-   /**
-      Activate this plugin.
-    */
+    /**
+       Activate this plugin.
+     */
     void activate() override
     {
-        fSmoothGain.clearToTargetValue();
+        printf("actiavted\n");
     }
 
-   /**
-      Run/process function for plugins without MIDI input.
-      @note Some parameters might be null if there are no audio inputs or outputs.
-    */
-    void run(const float** inputs, float** outputs, uint32_t frames) override
+    /**
+       Run/process function for plugins without MIDI input.
+       @note Some parameters might be null if there are no audio inputs or outputs.
+     */
+#if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+    void run(const float **inputs, float **outputs, uint32_t frames,
+             const MidiEvent *midiEvents, uint32_t midiEventCount) override
+#else
+    void run(const float **inputs, float **outputs, uint32_t frames) override
+#endif
     {
         // get the left and right audio inputs
-        const float* const inpL = inputs[0];
-        const float* const inpR = inputs[1];
+        const float *const inpL = inputs[0];
+        const float *const inpR = inputs[1];
 
         // get the left and right audio outputs
-        float* const outL = outputs[0];
-        float* const outR = outputs[1];
+        float *const outL = outputs[0];
+        float *const outR = outputs[1];
 
-        // apply gain against all samples
-        for (uint32_t i=0; i < frames; ++i)
+        if (outputs[0] != inputs[0])
+            std::memcpy(outputs[0], inputs[0], sizeof(float) * frames);
+
+        if (outputs[1] != inputs[1])
+            std::memcpy(outputs[1], inputs[1], sizeof(float) * frames);
+
+#if DISTRHO_PLUGIN_WANT_MIDI_INPUT
+        for (uint32_t i = 0; i < midiEventCount; ++i)
         {
-            const float gain = fSmoothGain.next();
-            outL[i] = inpL[i] * gain;
-            outR[i] = inpR[i] * gain;
+            /*
+                Midi event: Status | Note | Velocity | xxx
+            */
+
+            uint8_t note = midiEvents[i].data[1];
+            arpaggio[note].midi_status = midiEvents[i].data[0];
+            arpaggio[note].midi_velocity = midiEvents[i].data[2];
+
+            printf("node %d status %02x\n", note, arpaggio[note].midi_status);
+
+            if ((midiEvents[i].data[0] & 0xF0) == 0x90)
+            {
+                arpaggio[note].steps = 0;
+                arpaggio[note].timer = 0;
+            }
+
+            if ((midiEvents[i].data[0] & 0xF0) == 0x80)
+            {
+                writeMidiEvent(midiEvents[i]);
+                arpaggio[i].steps = fParams[kParamRate];
+            }
+
+            printf("%d %d ", midiEvents[i].frame, midiEvents[i].size);
+            for (int j = 0; j < 4; j++)
+            {
+                printf("%02x ", midiEvents[i].data[j]);
+            }
+            printf("\n");
         }
+
+        if (midiEventCount)
+            printf("-------------------\n");
+
+        for (int i = 0; i < 128; i++)
+        {
+
+            if ((arpaggio[i].midi_status & 0xF0) == 0x90)
+            {
+                //printf("note %d on timer = %f\n", i, arpaggio[i].steps);
+                /* If we are under node duration, we cut! */
+
+                if ( (arpaggio[i].steps <= ((1.0 - fParams[KParamNoteLen]) * fParams[kParamRate]))  && (arpaggio[i].steps > 0.0f) )
+                {
+                    MidiEvent me;
+                    memset(&me, 0, sizeof(MidiEvent));
+                    me.size = 3;
+                    me.data[0] = arpaggio[i].midi_status & 0xEF;
+                    me.data[1] = i;
+                    me.data[2] = arpaggio[i].midi_velocity;
+                    writeMidiEvent(me);
+                }
+            
+                /* If we are under 0, we run again! */
+                if ((arpaggio[i].steps <= 0.001))
+                {
+                    MidiEvent me;
+                    memset(&me, 0, sizeof(MidiEvent));
+                    me.size = 3;
+                    me.data[0] = arpaggio[i].midi_status;
+                    me.data[1] = i;
+                    me.data[2] = arpaggio[i].midi_velocity;
+                    arpaggio[i].steps = (fParams[kParamRate]);
+                    writeMidiEvent(me);
+                }
+
+                arpaggio[i].steps = arpaggio[i].steps/2;
+            }
+        }
+
+#endif
     }
 
     // ----------------------------------------------------------------------------------------------------------------
     // Callbacks (optional)
 
-   /**
-      Optional callback to inform the plugin about a sample rate change.@n
-      This function will only be called when the plugin is deactivated.
-      @see getSampleRate()
-    */
+    /**
+       Optional callback to inform the plugin about a sample rate change.@n
+       This function will only be called when the plugin is deactivated.
+       @see getSampleRate()
+     */
     void sampleRateChanged(double newSampleRate) override
     {
-        fSmoothGain.setSampleRate(newSampleRate);
+        printf("Rate chanted\n");
     }
 
     // ----------------------------------------------------------------------------------------------------------------
@@ -208,7 +295,7 @@ protected:
 
 // --------------------------------------------------------------------------------------------------------------------
 
-Plugin* createPlugin()
+Plugin *createPlugin()
 {
     return new ImGuiPluginDSP();
 }
