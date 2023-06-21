@@ -14,16 +14,16 @@ START_NAMESPACE_DISTRHO
 
 class ImGuiPluginUI : public UI
 {
-    float fGain = 0.0f;
+    float fParams[2];
     ResizeHandle fResizeHandle;
 
     // ----------------------------------------------------------------------------------------------------------------
 
 public:
-   /**
-      UI class constructor.
-      The UI should be initialized to a default state that matches the plugin side.
-    */
+    /**
+       UI class constructor.
+       The UI should be initialized to a default state that matches the plugin side.
+     */
     ImGuiPluginUI()
         : UI(DISTRHO_UI_DEFAULT_WIDTH, DISTRHO_UI_DEFAULT_HEIGHT, true),
           fResizeHandle(this)
@@ -39,24 +39,24 @@ protected:
     // ----------------------------------------------------------------------------------------------------------------
     // DSP/Plugin Callbacks
 
-   /**
-      A parameter has changed on the plugin side.@n
-      This is called by the host to inform the UI about parameter changes.
-    */
+    /**
+       A parameter has changed on the plugin side.@n
+       This is called by the host to inform the UI about parameter changes.
+     */
     void parameterChanged(uint32_t index, float value) override
     {
-        DISTRHO_SAFE_ASSERT_RETURN(index == 0,);
 
-        fGain = value;
+        printf("UI Param %d changed to %f\n", index, value);
+        fParams[index] = value;
         repaint();
     }
 
     // ----------------------------------------------------------------------------------------------------------------
     // Widget Callbacks
 
-   /**
-      ImGui specific onDisplay function.
-    */
+    /**
+       ImGui specific onDisplay function.
+     */
     void onImGuiDisplay() override
     {
         const float width = getWidth();
@@ -64,24 +64,31 @@ protected:
         const float margin = 20.0f * getScaleFactor();
 
         ImGui::SetNextWindowPos(ImVec2(margin, margin));
-        ImGui::SetNextWindowSize(ImVec2(width - 2 * margin, height - 2 * margin));
+        ImGui::SetNextWindowSize(ImVec2(width -  2 * margin, height - 2 * margin));
 
-        if (ImGui::Begin("Simple gain", nullptr, ImGuiWindowFlags_NoResize))
+        if (ImGui::Begin("Future Arp", nullptr, ImGuiWindowFlags_NoResize))
         {
-            static char aboutText[256] = "This is a demo plugin made with ImGui.\n";
-            ImGui::InputTextMultiline("About", aboutText, sizeof(aboutText));
 
-            if (ImGui::SliderFloat("Gain (dB)", &fGain, -90.0f, 30.0f))
+            if (ImGui::SliderFloat("Rate (BPM)", &fParams[0], 0.0f, 16.0f))
             {
                 if (ImGui::IsItemActivated())
                     editParameter(0, true);
 
-                setParameterValue(0, fGain);
+                setParameterValue(0, fParams[0]);
+            }
+
+            if (ImGui::SliderFloat("Note Lenght", &fParams[1], 0.01f, 1.0f))
+            {
+                if (ImGui::IsItemActivated())
+                    editParameter(1, true);
+
+                setParameterValue(1, fParams[1]);
             }
 
             if (ImGui::IsItemDeactivated())
             {
                 editParameter(0, false);
+                editParameter(1, false);
             }
         }
         ImGui::End();
@@ -92,7 +99,7 @@ protected:
 
 // --------------------------------------------------------------------------------------------------------------------
 
-UI* createUI()
+UI *createUI()
 {
     return new ImGuiPluginUI();
 }
