@@ -10,7 +10,7 @@
    This is used to identify your plugin before a Plugin instance can be created.
    @note This macro is required.
  */
-#define DISTRHO_PLUGIN_NAME "ImGuiSimpleGain"
+#define DISTRHO_PLUGIN_NAME "Future-MidiArp"
 
 /**
    Number of audio inputs the plugin has.
@@ -68,13 +68,13 @@
    Whether the plugin wants MIDI input.@n
    This is automatically enabled if @ref DISTRHO_PLUGIN_IS_SYNTH is true.
  */
-#define DISTRHO_PLUGIN_WANT_MIDI_INPUT 0
+#define DISTRHO_PLUGIN_WANT_MIDI_INPUT 1
 
 /**
    Whether the plugin wants MIDI output.
    @see Plugin::writeMidiEvent(const MidiEvent&)
  */
-#define DISTRHO_PLUGIN_WANT_MIDI_OUTPUT 0
+#define DISTRHO_PLUGIN_WANT_MIDI_OUTPUT 1
 
 /**
    Whether the plugin wants to change its own parameter inputs.@n
@@ -267,7 +267,7 @@
       - Mono
       - Stereo
  */
-#define DISTRHO_PLUGIN_VST3_CATEGORIES "Fx|Dynamics|Stereo"
+#define DISTRHO_PLUGIN_VST3_CATEGORIES "Fx|Tools|Stereo"
 
 /**
    Custom CLAP features for the plugin.@n
@@ -331,4 +331,4 @@
    The plugin id when exporting in CLAP format, in reverse URI form.
    @note This macro is required when building CLAP plugins
 */
-#define DISTRHO_PLUGIN_CLAP_ID "studio.kx.distrho.examples.imguisimplegain"
+#define DISTRHO_PLUGIN_CLAP_ID "key2.distrho.future.midi.arp"
