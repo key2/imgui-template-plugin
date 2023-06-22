@@ -21,8 +21,8 @@ class ImGuiPluginDSP : public Plugin
 
     struct arpaggio_s
     {
-        float timer;
         float steps;
+        bool note_on;
         uint8_t midi_status;
         uint8_t midi_velocity;
     } arpaggio[128];
@@ -216,7 +216,7 @@ protected:
             if ((midiEvents[i].data[0] & 0xF0) == 0x90)
             {
                 arpaggio[note].steps = 0;
-                arpaggio[note].timer = 0;
+                arpaggio[note].note_on = false;
             }
 
             if ((midiEvents[i].data[0] & 0xF0) == 0x80)
@@ -241,23 +241,12 @@ protected:
 
             if ((arpaggio[i].midi_status & 0xF0) == 0x90)
             {
-                //printf("note %d on timer = %f\n", i, arpaggio[i].steps);
-                /* If we are under node duration, we cut! */
+                //printf("steps: %f %f\n", arpaggio[i].steps, ((1.0 - fParams[KParamNoteLen]) * fParams[kParamRate]));
 
-                if ( (arpaggio[i].steps <= ((1.0 - fParams[KParamNoteLen]) * fParams[kParamRate]))  && (arpaggio[i].steps > 0.0f) )
-                {
-                    MidiEvent me;
-                    memset(&me, 0, sizeof(MidiEvent));
-                    me.size = 3;
-                    me.data[0] = arpaggio[i].midi_status & 0xEF;
-                    me.data[1] = i;
-                    me.data[2] = arpaggio[i].midi_velocity;
-                    writeMidiEvent(me);
-                }
-            
                 /* If we are under 0, we run again! */
-                if ((arpaggio[i].steps <= 0.001))
+                if ((arpaggio[i].steps <= 0.0f) && (arpaggio[i].note_on == false))
                 {
+                   // printf("activate\n");
                     MidiEvent me;
                     memset(&me, 0, sizeof(MidiEvent));
                     me.size = 3;
@@ -266,9 +255,26 @@ protected:
                     me.data[2] = arpaggio[i].midi_velocity;
                     arpaggio[i].steps = (fParams[kParamRate]);
                     writeMidiEvent(me);
+                    arpaggio[i].note_on = true;
+                    continue;
                 }
 
-                arpaggio[i].steps = arpaggio[i].steps/2;
+                arpaggio[i].steps = arpaggio[i].steps - 0.1;
+                // printf("note %d on timer = %f\n", i, arpaggio[i].steps);
+                /* If we are under node duration, we cut! */
+
+                if ((arpaggio[i].steps <= ((1.0 - fParams[KParamNoteLen]) * fParams[kParamRate])) && (arpaggio[i].note_on == true))
+                {
+                 //   printf("off\n");
+                    MidiEvent me;
+                    memset(&me, 0, sizeof(MidiEvent));
+                    me.size = 3;
+                    me.data[0] = arpaggio[i].midi_status & 0xEF;
+                    me.data[1] = i;
+                    me.data[2] = arpaggio[i].midi_velocity;
+                    writeMidiEvent(me);
+                    arpaggio[i].note_on = false;
+                }
             }
         }
 
