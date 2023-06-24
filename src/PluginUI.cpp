@@ -14,7 +14,7 @@ START_NAMESPACE_DISTRHO
 
 class ImGuiPluginUI : public UI
 {
-    float fParams[2];
+    float fParams[3];
     ResizeHandle fResizeHandle;
 
     // ----------------------------------------------------------------------------------------------------------------
@@ -85,10 +85,20 @@ protected:
                 setParameterValue(1, fParams[1]);
             }
 
+            if (ImGui::SliderFloat("Randomness", &fParams[2], 0.00f, 1.0f))
+            {
+                if (ImGui::IsItemActivated())
+                    editParameter(2, true);
+
+                setParameterValue(2, fParams[2]);
+            }
+
+
             if (ImGui::IsItemDeactivated())
             {
                 editParameter(0, false);
                 editParameter(1, false);
+                editParameter(2, false);
             }
         }
         ImGui::End();
