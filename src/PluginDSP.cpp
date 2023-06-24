@@ -16,6 +16,7 @@ class ImGuiPluginDSP : public Plugin
     {
         kParamRate = 0,
         KParamNoteLen,
+        KParamRandomness,
         kParamCount
     };
 
@@ -38,8 +39,9 @@ public:
         : Plugin(kParamCount, 0, 0) // parameters, programs, states
     {
         std::memset(fParams, 0, sizeof(fParams));
-        fParams[kParamRate] = 1.0;
-        fParams[KParamNoteLen] = 1.0;
+        fParams[kParamRate] = 1.0f;
+        fParams[KParamNoteLen] = 1.0f;
+        fParams[KParamRandomness] = 0.0f;
 
         std::memset(arpaggio, 0, sizeof(arpaggio));
     }
@@ -236,6 +238,8 @@ protected:
         if (midiEventCount)
             printf("-------------------\n");
 
+        float tmprand = ((float)rand() / (float)(RAND_MAX)) * fParams[KParamRandomness] - fParams[KParamRandomness]/2.0;
+
         for (int i = 0; i < 128; i++)
         {
 
@@ -253,13 +257,13 @@ protected:
                     me.data[0] = arpaggio[i].midi_status;
                     me.data[1] = i;
                     me.data[2] = arpaggio[i].midi_velocity;
-                    arpaggio[i].steps = (fParams[kParamRate]);
+                    arpaggio[i].steps = powf(2.5, (fParams[kParamRate] - 16)/4 ) + tmprand;
                     writeMidiEvent(me);
                     arpaggio[i].note_on = true;
                     continue;
                 }
 
-                arpaggio[i].steps = arpaggio[i].steps - 0.1;
+                arpaggio[i].steps = arpaggio[i].steps - 0.02;
                 // printf("note %d on timer = %f\n", i, arpaggio[i].steps);
                 /* If we are under node duration, we cut! */
 
